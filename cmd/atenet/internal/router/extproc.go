@@ -153,6 +153,7 @@ func (s *ExtProcServer) handleRequestHeaders(
 		// Host is invalid, respond with 404.
 		return nil, metadata, "", "", "", ResumeOutcomeNone, invalidHostErr(metadata.host, err)
 	}
+	span.SetAttributes(ateattr.ActorRefAttributes(actorRef)...)
 
 	// Admit the request to the parking lot before resuming. While resume is
 	// in-flight the request occupies a slot; if the actor's worker pool is
@@ -200,9 +201,11 @@ func (s *ExtProcServer) handleRequestHeaders(
 
 	// Route by telling the ORIGINAL_DST cluster which worker atunnel address to
 	// dial, without touching :authority — atunnel authorizes the actor by the
-	// original Host (actor DNS name).
+	// original Host (actor DNS name). Inject the trace context so the upstream
+	// worker receives the same trace as the ingress path.
 	mutation := &extprocv3.HeaderMutation{}
 	addOriginalDstMutation(targetAddr, mutation)
+	injectTraceContext(ctx, mutation)
 
 	return &extprocv3.HeadersResponse{
 		Response: &extprocv3.CommonResponse{
